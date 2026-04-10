@@ -23,8 +23,11 @@ cmake -S $DEV/mfem -B $BUILD                       \
       -DCMAKE_BUILD_TYPE=RELEASE                   \
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON         \
       -DMFEM_USE_MPI=ON                            \
+      -DMFEM_USE_PETSC=ON                          \
       -DHYPRE_DIR=$PETSC_DIR                       \
-      -DMETIS_DIR=$PETSC_DIR
+      -DMETIS_DIR=$PETSC_DIR                       \
+      -DPETSC_DIR=$PETSC_DIR                       \
+      -DPETSC_ARCH=""
 
 # 3. Build the library, examples, miniapps, and tests using $NJOBS
 cmake --build $BUILD -j $NJOBS

@@ -6,12 +6,15 @@ petsc_install = os.path.join(os.getenv('HOME'), 'dev/petsc-install')
 
 configure_options = [
   '--prefix=' + petsc_install,
-  '--with-cc=gcc-14.1.0',
-  '--with-cxx=g++-14.1.0',
-  '--with-fc=0',                     
   
-  # PETSc still needs BLAS/LAPACK for basic math, so we keep the C-translation
-  '--download-f2cblaslapack=1',      
+  # Removed explicit --with-cc and --with-cxx to use system defaults (GCC 13)
+  
+  # Enable Fortran
+  '--with-fc=gfortran',                     
+  
+  # Download native Fortran BLAS/LAPACK instead of the f2c translation
+  '--download-fblaslapack=1',      
+  
   'CFLAGS=-Wno-implicit-function-declaration -Wno-incompatible-pointer-types -Wno-implicit-int',
   
   'COPTFLAGS=-g -O',
@@ -24,7 +27,7 @@ configure_options = [
   '--download-metis=1',
   '--download-parmetis=1',
   
-  # --- OPTIONAL I/O (You can safely delete these if you don't use them) ---
+  # --- OPTIONAL I/O ---
   '--download-netcdf=1',
   '--download-hdf5=1',
   '--download-gslib-1',
