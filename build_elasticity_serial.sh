@@ -42,8 +42,8 @@ echo "========================================================"
 rm -rf $BUILD_DIR
 
 cmake -S $PROJECT_DIR -B $BUILD_DIR \
-      -DCMAKE_C_COMPILER=gcc-14.1.0 \
-      -DCMAKE_CXX_COMPILER=g++-14.1.0 \
+      -DCMAKE_C_COMPILER=gcc \
+      -DCMAKE_CXX_COMPILER=g++ \
       -DCMAKE_BUILD_TYPE=RELEASE \
       -DMFEM_DIR=$MFEM_DIR \
       -DUSE_MPI=OFF \
