@@ -43,10 +43,7 @@ sudo apt install -y \
     libfreetype-dev    \
     libglm-dev
 
-echo "--> Installing Meshing tools (Gmsh)..."
-sudo apt install -y \
-    gmsh \
-    libgmsh-dev
+
 
 echo "========================================="
 echo " Setup complete! "
