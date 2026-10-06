@@ -76,8 +76,33 @@ export MPICC=mpicc MPICXX=mpicxx   # e.g. use the cluster's MPI instead
 
 Overridables: `DEV`, `PETSC_INSTALL`, `SERIAL_CC`, `SERIAL_CXX`,
 `MPICC`, `MPICXX`, `MFEM_SERIAL_BUILD`, `MFEM_PARALLEL_BUILD`.
-`petsc-configure.py` honours `DEV` and `PETSC_INSTALL` too. For
-persistent per-machine settings, use `local.env` (next section).
+`petsc-configure.py` honours `DEV`, `PETSC_INSTALL` and
+`PETSC_EXTRA_OPTIONS` too. For persistent per-machine settings, use
+`local.env` (next section).
+
+### Extra PETSc packages without editing the script
+
+`petsc-configure.py` takes additional configure options two ways:
+
+- One-off, on the command line (anything it does not recognise is
+  forwarded to PETSc configure unchanged):
+
+  ```sh
+  cd $DEV/petsc && ~/dev/install_scripts/petsc-configure.py --download-hdf5=1
+  ```
+
+- Persistently, via `PETSC_EXTRA_OPTIONS` — a space-separated list,
+  with shell quoting for options that contain spaces:
+
+  ```sh
+  export PETSC_EXTRA_OPTIONS="--download-netcdf=1 --download-hdf5=1"
+  ```
+
+  Put the export in `local.env` and `build_all.sh` picks it up
+  automatically; when running `petsc-configure.py` by hand, export it
+  in the shell (the script does not read `local.env` itself). Check
+  with `petsc-configure.py -n`, which marks the extra options in the
+  printed list.
 
 ## Persistent per-machine settings: `local.env`
 

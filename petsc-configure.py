@@ -14,10 +14,20 @@
 # follows the DEV / PETSC_INSTALL environment variables, defaulting to
 # ~/dev/petsc-install, to match common.sh.
 import os
+import shlex
 import sys
 
 dev = os.environ.get('DEV', os.path.join(os.environ['HOME'], 'dev'))
 petsc_install = os.environ.get('PETSC_INSTALL', os.path.join(dev, 'petsc-install'))
+
+# Additional configure options without editing this script: a space-
+# separated list in PETSC_EXTRA_OPTIONS (shell quoting for options that
+# contain spaces), e.g. in local.env:
+#
+#   export PETSC_EXTRA_OPTIONS="--download-hdf5=1 --download-netcdf=1"
+#
+# build_all.sh passes the environment through, so this works there too.
+extra_options = shlex.split(os.environ.get('PETSC_EXTRA_OPTIONS', ''))
 
 configure_options = [
   '--prefix=' + petsc_install,
@@ -50,14 +60,13 @@ configure_options = [
 
 # Optional I/O packages: nothing in the current MFEM builds uses these
 # (MFEM_USE_NETCDF / MFEM_USE_GSLIB are off), so they are left out to
-# keep the PETSc build shorter. Re-enable if an MFEM build needs them.
-# configure_options += [
-#   '--download-netcdf=1',
-#   '--download-hdf5=1',
-#   '--download-gslib=1',
-#   '--download-zlib=1',
-#   '--download-szlib=1',
-# ]
+# keep the PETSc build shorter. Enable via PETSC_EXTRA_OPTIONS (or the
+# command line) if an MFEM build needs them, e.g.
+#
+#   export PETSC_EXTRA_OPTIONS="--download-netcdf=1 --download-hdf5=1
+#     --download-gslib=1 --download-zlib=1 --download-szlib=1"
+
+configure_options += extra_options
 
 if __name__ == '__main__':
   show_only = False
@@ -68,7 +77,8 @@ if __name__ == '__main__':
 
   print('PETSc configure options (install prefix: %s):' % petsc_install)
   for opt in configure_options:
-    print('  ' + opt)
+    marker = '  [PETSC_EXTRA_OPTIONS]' if opt in extra_options else ''
+    print('  ' + opt + marker)
   if len(sys.argv) > 1:
     print('extra options from the command line:')
     for opt in sys.argv[1:]:
