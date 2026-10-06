@@ -1,7 +1,8 @@
 #!/bin/bash
+#
+# System packages for the Ubuntu 24.04 dev environment.
 
-# Exit immediately if a command exits with a non-zero status
-set -e
+set -euo pipefail
 
 echo "========================================="
 echo " Setting up Ubuntu 24.04 Dev Environment "
@@ -23,9 +24,9 @@ sudo apt install -y \
     clangd \
     clang-format
 
-# Uncomment the next two lines if you decide you absolutely need GCC 14
-echo "--> Installing GCC 14..."
-sudo apt install -y gcc-14 g++-14
+# GCC 14 is available on 24.04 but nothing in these scripts uses it
+# (the builds use the default gcc/g++, GCC 13). Uncomment if needed.
+# sudo apt install -y gcc-14 g++-14
 
 echo "--> Installing Python environment (needed for PETSc configure)..."
 # Ubuntu 24.04 uses Python 3.12 by default
@@ -42,8 +43,6 @@ sudo apt install -y \
     libfontconfig1-dev \
     libfreetype-dev    \
     libglm-dev
-
-
 
 echo "========================================="
 echo " Setup complete! "

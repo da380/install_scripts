@@ -1,22 +1,24 @@
 #!/bin/bash
+#
+# Build and install Gmsh from source (with OCC and FLTK), into /usr/local.
 
-# Exit immediately if a command exits with a non-zero status
-set -e
+set -euo pipefail
+
+source "$(dirname "$(readlink -f "$0")")/common.sh"
 
 echo "========================================="
 echo " Installing Gmsh from Source (with OCC/FLTK) "
 echo "========================================="
 
-# 1. Define Paths
-DEV_DIR="$HOME/dev"
-GMSH_SRC_DIR="$DEV_DIR/gmsh"
-mkdir -p "$DEV_DIR"
+GMSH_SRC_DIR=$DEV/gmsh
+GMSH_BUILD_DIR=$GMSH_SRC_DIR/build
+mkdir -p "$DEV"
 
-# 2. Clean up existing system Gmsh to avoid conflicts
+# 1. Clean up existing system Gmsh to avoid conflicts
 echo "--> Removing existing system gmsh packages..."
 sudo apt remove -y gmsh libgmsh-dev || true
 
-# 3. Install Dependencies
+# 2. Install Dependencies
 echo "--> Installing Build Dependencies..."
 sudo apt update
 sudo apt install -y \
@@ -38,27 +40,21 @@ sudo apt install -y \
     libocct-visualization-dev \
     libocct-foundation-dev
 
-# 4. Clone Repository
+# 3. Clone or update the repository
 if [ -d "$GMSH_SRC_DIR" ]; then
     echo "--> Updating existing Gmsh repository..."
-    cd "$GMSH_SRC_DIR"
-    git pull
+    git -C "$GMSH_SRC_DIR" pull
 else
     echo "--> Cloning Gmsh from GitLab..."
-    cd "$DEV_DIR"
-    git clone https://gitlab.onelab.info/gmsh/gmsh.git
-    cd gmsh
+    git clone https://gitlab.onelab.info/gmsh/gmsh.git "$GMSH_SRC_DIR"
 fi
 
-# 5. Configure and Build
+# 4. Configure and build (fresh configure: clear any old cache so the
+# newly installed libraries are picked up)
 echo "--> Configuring with FLTK and OCC..."
-mkdir -p build
-cd build
+rm -f "$GMSH_BUILD_DIR/CMakeCache.txt"
 
-# Clear old cache to ensure a fresh scan for the new libraries
-rm -f CMakeCache.txt
-
-cmake .. \
+cmake -S "$GMSH_SRC_DIR" -B "$GMSH_BUILD_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
     -DENABLE_FLTK=ON \
     -DENABLE_OCC=ON \
@@ -66,11 +62,11 @@ cmake .. \
     -DENABLE_PRIVATE_API=ON
 
 echo "--> Compiling..."
-make -j$(nproc)
+cmake --build "$GMSH_BUILD_DIR" -j "$(nproc)"
 
-# 6. Install
+# 5. Install
 echo "--> Installing to /usr/local..."
-sudo make install
+sudo cmake --install "$GMSH_BUILD_DIR"
 
 echo "========================================="
 echo " Gmsh Source Build Complete! "

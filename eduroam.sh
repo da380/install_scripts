@@ -1,14 +1,13 @@
 #!/bin/bash
-
 # ==============================================================================
 # EDURoam Configuration Script for Ubuntu (NetworkManager / nmcli)
 # University of Cambridge Settings
+#
+# The username and token are prompted for at runtime: do NOT write them
+# into this file, it lives in a git repository.
 # ==============================================================================
 
-# --- EDIT THESE TWO VARIABLES ---
-USERNAME=""      # e.g., abc123+laptop@cam.ac.uk
-PASSWORD=""        # Your 16-character token, NOT your Uni password
-# --------------------------------
+set -euo pipefail
 
 # Cambridge-specific technical settings (Do not change unless advised by IT)
 ANON_IDENTITY="_token-public@cam.ac.uk"
@@ -31,15 +30,25 @@ if [ ! -f "$CA_CERT_PATH" ]; then
     exit 1
 fi
 
-echo "Certificate found. Proceeding with configuration..."
+echo "Certificate found."
 
-# 3. Clean up any existing 'eduroam' profiles to prevent conflicts
-if nmcli connection show | grep -q "^$CONNECTION_NAME\s"; then
+# 3. Credentials
+read -rp  "Username (e.g. abc123+laptop@cam.ac.uk): " USERNAME
+read -rsp "Token (your 16-character wifi token, NOT your Uni password): " PASSWORD
+echo
+
+if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+    echo "Error: username and token must both be given."
+    exit 1
+fi
+
+# 4. Clean up any existing 'eduroam' profiles to prevent conflicts
+if nmcli connection show "$CONNECTION_NAME" >/dev/null 2>&1; then
     echo "Removing existing '$CONNECTION_NAME' network profile..."
     nmcli connection delete "$CONNECTION_NAME" >/dev/null
 fi
 
-# 4. Create the new NetworkManager profile
+# 5. Create the new NetworkManager profile
 echo "Building new '$CONNECTION_NAME' network profile..."
 
 nmcli connection add \
@@ -55,12 +64,7 @@ nmcli connection add \
   802-1x.ca-cert "$CA_CERT_PATH" \
   802-1x.domain-suffix-match "$DOMAIN_SUFFIX"
 
-if [ $? -ne 0 ]; then
-    echo "Error: Failed to create the network profile."
-    exit 1
-fi
-
-# 5. Attempt to bring the connection up
+# 6. Attempt to bring the connection up
 echo "Profile created successfully. Attempting to connect to '$CONNECTION_NAME'..."
 nmcli connection up "$CONNECTION_NAME"
 
