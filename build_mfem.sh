@@ -29,6 +29,8 @@ GLVis is built in serial mode when \$DEV/glvis exists):
       --no-glvis      serial mode: do not build GLVis
   -g, --debug         Debug build type (default: Release)
   -k, --keep          keep the existing build directory (incremental build)
+  -n, --dry-run       print the resolved configuration and the cmake
+                      command, build nothing
   -h, --help          this message
 
 Paths and compilers come from common.sh and can be overridden from the
@@ -45,6 +47,7 @@ BUILD_TESTS=1
 BUILD_GLVIS=1
 BUILD_TYPE=Release
 KEEP=0
+DRY_RUN=0
 EXTRA_ARGS=()
 
 if [[ $# -eq 0 ]]; then usage; exit 1; fi
@@ -52,6 +55,7 @@ MODE=$1; shift
 case $MODE in
     serial)
         BUILD_DIR=$MFEM_SERIAL_BUILD
+        SHOW_CC=$SERIAL_CC SHOW_CXX=$SERIAL_CXX
         MODE_ARGS=(
             -DCMAKE_C_COMPILER="$SERIAL_CC"
             -DCMAKE_CXX_COMPILER="$SERIAL_CXX"
@@ -59,6 +63,7 @@ case $MODE in
         ;;
     parallel)
         BUILD_DIR=$MFEM_PARALLEL_BUILD
+        SHOW_CC=$MPICC SHOW_CXX=$MPICXX
         MODE_ARGS=(
             -DCMAKE_C_COMPILER="$MPICC"
             -DCMAKE_CXX_COMPILER="$MPICXX"
@@ -81,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         --no-glvis)     BUILD_GLVIS=0 ;;
         -g|--debug)     BUILD_TYPE=Debug ;;
         -k|--keep)      KEEP=1 ;;
+        -n|--dry-run)   DRY_RUN=1 ;;
         -h|--help)      usage; exit 0 ;;
         --)             shift; EXTRA_ARGS=("$@"); break ;;
         *) echo "error: unknown option '$1'" >&2; usage; exit 1 ;;
@@ -88,31 +94,47 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-if [[ ! -d $DEV/mfem ]]; then
-    echo "error: no MFEM source at $DEV/mfem (clone it there first)" >&2
-    exit 1
+if [[ $DRY_RUN -eq 0 ]]; then
+    if [[ ! -d $DEV/mfem ]]; then
+        echo "error: no MFEM source at $DEV/mfem (clone it there first)" >&2
+        exit 1
+    fi
+    if [[ $MODE == parallel && ! -x $MPICXX ]]; then
+        echo "error: MPI compiler wrapper $MPICXX not found (build PETSc first," >&2
+        echo "       or point MPICC/MPICXX at a system MPI)" >&2
+        exit 1
+    fi
 fi
-if [[ $MODE == parallel && ! -x $MPICXX ]]; then
-    echo "error: MPI compiler wrapper $MPICXX not found (build PETSc first," >&2
-    echo "       or point MPICC/MPICXX at a system MPI)" >&2
-    exit 1
-fi
+
+CMAKE_ARGS=(
+    -S "$DEV/mfem" -B "$BUILD_DIR"
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    "${MODE_ARGS[@]}"
+    "${EXTRA_ARGS[@]}"
+)
 
 echo "========================================================"
 echo " MFEM ($MODE, $BUILD_TYPE)"
-echo " jobs $NJOBS | examples $BUILD_EXAMPLES | miniapps $BUILD_MINIAPPS | tests $BUILD_TESTS"
+echo " jobs $NJOBS | examples $BUILD_EXAMPLES | miniapps $BUILD_MINIAPPS | tests $BUILD_TESTS$(
+    [[ $MODE == serial ]] && echo " | glvis $BUILD_GLVIS")"
+echo " compilers: $SHOW_CC / $SHOW_CXX"
+echo " source: $DEV/mfem"
 echo " build dir: $BUILD_DIR$( [[ $KEEP -eq 1 ]] && echo ' (kept)' || echo ' (fresh)')"
 echo "========================================================"
+
+if [[ $DRY_RUN -eq 1 ]]; then
+    echo "cmake configure command:"
+    printf '  cmake'; printf ' %q' "${CMAKE_ARGS[@]}"; printf '\n'
+    echo "(dry run: nothing built)"
+    exit 0
+fi
 
 if [[ $KEEP -eq 0 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
-cmake -S "$DEV/mfem" -B "$BUILD_DIR" \
-      -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-      "${MODE_ARGS[@]}" \
-      "${EXTRA_ARGS[@]}"
+cmake "${CMAKE_ARGS[@]}"
 
 cmake --build "$BUILD_DIR" -j "$NJOBS"
 [[ $BUILD_EXAMPLES -eq 1 ]] && cmake --build "$BUILD_DIR" -t examples -j "$NJOBS"

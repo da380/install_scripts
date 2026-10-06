@@ -36,6 +36,32 @@ $DEV/
    `./build_elasticity_serial.sh`, `./build_elasticity_parallel.sh`
    (all thin wrappers around `build_project.sh`; `-h` shows the options).
 
+### One-shot: `build_all.sh`
+
+Steps 2–3–5 for the common AdGIA workflow are wrapped in one script:
+
+```sh
+./build_all.sh            # PETSc → serial MFEM (+GLVis) → parallel MFEM
+                          #       → serial AdGIA → parallel AdGIA
+./build_all.sh --skip-petsc   # reuse an existing PETSc install
+./build_all.sh -n             # dry run: show the plan, build nothing
+```
+
+It assumes the sources are already cloned under `$DEV` (`petsc/`,
+`mfem/`, `glvis/` optional, `AdGIA/`) and checks all of them before
+starting, so a missing source is not discovered an hour into the PETSc
+build. `--skip-mfem` / `--skip-adgia` skip the other stages;
+mfemElasticity is not included.
+
+### Seeing what a script will do
+
+`build_mfem.sh`, `build_project.sh` (and its wrappers) and
+`build_all.sh` all take `-n` / `--dry-run`: they print the resolved
+configuration — paths, compilers, option defaults, and the exact cmake
+command — and exit without building anything. `petsc-configure.py -n`
+likewise prints the configure options and exits; without `-n` it prints
+them before configuring.
+
 ## Using these scripts on another machine
 
 All paths and compilers are defaults in `common.sh`, overridable from
@@ -51,8 +77,41 @@ export MPICC=mpicc MPICXX=mpicxx   # e.g. use the cluster's MPI instead
 Overridables: `DEV`, `PETSC_INSTALL`, `SERIAL_CC`, `SERIAL_CXX`,
 `MPICC`, `MPICXX`, `MFEM_SERIAL_BUILD`, `MFEM_PARALLEL_BUILD`.
 `petsc-configure.py` honours `DEV` and `PETSC_INSTALL` too. For
-persistent per-machine settings, put the exports in `local.env` next to
-`common.sh` (gitignored, sourced automatically).
+persistent per-machine settings, use `local.env` (next section).
+
+## Persistent per-machine settings: `local.env`
+
+Exporting variables in the shell works for one-off overrides, but they
+are gone with the shell session. For settings a machine should always
+use, create a file called `local.env` next to `common.sh` (i.e. in this
+directory) and put the exports there:
+
+```sh
+# local.env on the cluster — plain shell, sourced not executed
+export DEV=/scratch/david     # everything lives here instead of ~/dev
+export MPICC=mpicc            # use the system MPI wrappers instead of
+export MPICXX=mpic++          # the ones from the PETSc install
+```
+
+How it works:
+
+- `common.sh` sources `local.env` automatically (when it exists) at the
+  start of every `build_*.sh` run, so there is nothing to activate.
+- It is in `.gitignore`, so each machine keeps its own copy and `git
+  pull` never touches or conflicts with it. It is also why a fresh clone
+  has no `local.env` — create it only on machines that need overrides.
+- Any of the overridables listed above can go in it. Anything left out
+  falls back to the defaults in `common.sh`.
+- Precedence quirk: `local.env` is sourced *before* the defaults are
+  applied, so its exports also win over variables exported in the shell.
+  `DEV=/tmp/x ./build_mfem.sh serial` will NOT override a `DEV` set in
+  `local.env` — comment the line out there instead.
+- `petsc-configure.py` is Python and does not read `local.env` itself;
+  it only sees `DEV`/`PETSC_INSTALL` already exported in the
+  environment. Export them in the shell when running it by hand, or run
+  it via `build_all.sh`, which sources `local.env` and passes them on.
+- To check what a script will actually use, run it with `-n`/`--dry-run`
+  (see above): it prints the resolved paths and compilers and exits.
 
 ## Notes
 

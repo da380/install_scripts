@@ -4,6 +4,10 @@
 #
 #   cd $DEV/petsc && ~/dev/install_scripts/petsc-configure.py
 #
+# Pass -n / --show to print the configure options and exit without
+# configuring (works from any directory). Any other arguments are
+# forwarded to PETSc configure unchanged.
+#
 # PETSc is used here mainly as a dependency provider: it downloads and
 # builds a coherent MPI (MPICH) + hypre + metis/parmetis stack that the
 # parallel MFEM build points at (see build_mfem.sh). The install prefix
@@ -26,7 +30,10 @@ configure_options = [
   # Download native Fortran BLAS/LAPACK instead of the f2c translation
   '--download-fblaslapack=1',
 
-  'CFLAGS=-Wno-implicit-function-declaration -Wno-incompatible-pointer-types -Wno-implicit-int',
+  # Appended (+=) rather than overwriting, so PETSc's own default C flags
+  # are kept. These suppressions let newer GCC (14+) build the older
+  # downloaded packages, which it would otherwise reject as hard errors.
+  'CFLAGS+=-Wno-implicit-function-declaration -Wno-incompatible-pointer-types -Wno-implicit-int',
 
   'COPTFLAGS=-g -O',
   'CXXOPTFLAGS=-g -O',
@@ -53,6 +60,23 @@ configure_options = [
 # ]
 
 if __name__ == '__main__':
+  show_only = False
+  for flag in ('-n', '--show', '--dry-run'):
+    if flag in sys.argv:
+      sys.argv.remove(flag)
+      show_only = True
+
+  print('PETSc configure options (install prefix: %s):' % petsc_install)
+  for opt in configure_options:
+    print('  ' + opt)
+  if len(sys.argv) > 1:
+    print('extra options from the command line:')
+    for opt in sys.argv[1:]:
+      print('  ' + opt)
+
+  if show_only:
+    sys.exit(0)
+
   if not os.path.isdir('config'):
     sys.exit('error: run this script from the root of a PETSc source tree '
              '(no config/ directory in ' + os.getcwd() + ')')
