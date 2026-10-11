@@ -116,6 +116,8 @@ directory) and put the exports there:
 export DEV=/scratch/david     # everything lives here instead of ~/dev
 export MPICC=mpicc            # use the system MPI wrappers instead of
 export MPICXX=mpic++          # the ones from the PETSc install
+export POETRY_PYTHON=python3.12   # when the system python3 is older
+                              # (poetry does not pick one up by itself)
 ```
 
 How it works:
@@ -143,12 +145,16 @@ How it works:
 - AdGIA requires MFEM >= 4.9 and its configure fails on anything older
   (v4.10 is its reference version), so keep the `$DEV/mfem` clone
   reasonably current.
-- AdGIA's `meshes/`, `benchmarks/` and `postprocess/` directories are
-  poetry projects; run `poetry install` in each before building so the
-  mesh generation and the generated launchers use those environments
-  (without them the launchers fall back on `python3`). The resolution of
-  the generated meshes can be changed with `build_adgia_*.sh
-  --mesh-scale X` (smaller is finer).
+- AdGIA's Python tooling (`meshes/`, `benchmarks/`, `earth_data/`)
+  shares one poetry environment, the project of the repository root;
+  the build scripts discover it and pass it to CMake, and
+  `build_adgia_*.sh --poetry-install` makes or updates it first, with
+  `$POETRY_PYTHON` (set `POETRY_PYTHON=python3.12` in `local.env` on a
+  machine whose `python3` is older — poetry does not pick a newer
+  interpreter by itself). Without the environment the benchmark and
+  earth-data launchers fall back on `python3` and refuse to run. The
+  resolution of the generated meshes can be changed with
+  `build_adgia_*.sh --mesh-scale X` (smaller is finer).
 - PETSc is used purely as a dependency provider (MPI, hypre, metis,
   parmetis); the parallel MFEM build sets `MFEM_USE_PETSC=OFF`, so MFEM
   is not coupled to the PETSc version. Optional I/O packages (netcdf,

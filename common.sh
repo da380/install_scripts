@@ -35,3 +35,9 @@ unset _common_dir
 # MFEM build trees that the downstream projects compile against.
 : "${MFEM_SERIAL_BUILD:=$DEV/mfem_serial_build}"
 : "${MFEM_PARALLEL_BUILD:=$DEV/mfem_parallel_build}"
+
+# The Python for the project's poetry environment (the root project,
+# AdGIA's layout). Poetry needs >= 3.12 and does not pick a newer
+# interpreter by itself: on a machine whose python3 is older, set
+# POETRY_PYTHON=python3.12 (or a full path) here or in local.env.
+: "${POETRY_PYTHON:=python3}"

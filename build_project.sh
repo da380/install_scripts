@@ -31,6 +31,9 @@ for the parallel build — they are MPI-only — and off for the serial one):
   -g, --debug         Debug build type (default: Release)
   -k, --keep          keep the existing build directory (incremental build)
   -r, --run-tests     run ctest after a successful build
+  -p, --poetry-install  make or update the project's poetry environment
+                      (the root project) with \$POETRY_PYTHON before
+                      configuring
       --no-meshes     do not generate the gmsh meshes (GENERATE_MESHES=OFF)
   -s, --mesh-scale X  factor on every generated mesh's element sizes
                       (smaller is finer; AdGIA only, MESHES_SCALE=X)
@@ -38,16 +41,21 @@ for the parallel build — they are MPI-only — and off for the serial one):
                       command, build nothing
   -h, --help          this message
 
-The meshes are generated with the poetry environment of <project>/meshes
-when it exists (MESHES_PYTHON), so no venv is created inside the build tree.
-The benchmarks and the post-processing launchers (AdGIA) discover the
-poetry environments of <project>/benchmarks and <project>/postprocess on
-their own (BENCHMARKS_PYTHON / POSTPROCESS_PYTHON override via the extra
-cmake args); run 'poetry install' in those directories first, or the
-launchers fall back on python3.
+The project's poetry environment (one root project covering meshes,
+benchmarks and earth_data, AdGIA's layout) is discovered here and passed
+to CMake (MESHES_PYTHON, BENCHMARKS_PYTHON, EARTH_DATA_PYTHON; the extra
+cmake args override), so no venv is created inside the build tree and
+CMake needs no poetry of its own. --poetry-install makes or updates it
+first, with \$POETRY_PYTHON (poetry needs a Python >= 3.12 and does not
+pick one up by itself; on a machine whose python3 is older, set
+POETRY_PYTHON=python3.12 in local.env). Without an environment the
+benchmark and earth-data launchers fall back on python3 and refuse to
+run. A project without a root pyproject.toml is left to its own CMake
+discovery.
 
 Paths and compilers come from common.sh and can be overridden from the
-environment or local.env (DEV, PETSC_INSTALL, MPICC, MPICXX, ...).
+environment or local.env (DEV, PETSC_INSTALL, MPICC, MPICXX,
+POETRY_PYTHON, ...).
 
 Anything after -- is passed to cmake unchanged, e.g. -- -DCMAKE_CXX_FLAGS=-march=native
 USAGE
@@ -60,6 +68,7 @@ BUILD_DOCS=OFF
 BUILD_TYPE=Release
 KEEP=0
 RUN_TESTS=0
+POETRY_INSTALL=0
 DRY_RUN=0
 GENERATE_MESHES=ON
 MESH_SCALE=
@@ -106,6 +115,7 @@ while [[ $# -gt 0 ]]; do
         -g|--debug)     BUILD_TYPE=Debug ;;
         -k|--keep)      KEEP=1 ;;
         -r|--run-tests) RUN_TESTS=1 ;;
+        -p|--poetry-install) POETRY_INSTALL=1 ;;
         --no-meshes)    GENERATE_MESHES=OFF ;;
         -s|--mesh-scale) MESH_SCALE=$2; shift ;;
         -n|--dry-run)   DRY_RUN=1 ;;
@@ -139,18 +149,51 @@ if [[ -n $MESH_SCALE && $GENERATE_MESHES == OFF ]]; then
     exit 1
 fi
 
-# Reuse the poetry environment of meshes/ for the mesh generation if it
-# exists; otherwise CMake makes a venv inside the build directory.
-MESHES_ARGS=()
-if [[ $GENERATE_MESHES == ON ]] && command -v poetry >/dev/null; then
-    if venv=$(poetry -C "$PROJECT_DIR/meshes" env info -p 2>/dev/null) && [[ -x $venv/bin/python ]]; then
-        MESHES_ARGS=(-DMESHES_PYTHON="$venv/bin/python")
+# The poetry environment of the project's Python tooling: one project
+# at the repository root (AdGIA's layout). --poetry-install makes or
+# updates it with $POETRY_PYTHON; the configure below is then pointed at
+# it, so CMake needs no poetry of its own. Without the environment, mesh
+# generation makes a venv inside the build directory, and the benchmark
+# and earth-data launchers fall back on python3 and refuse to run. A
+# project without a root pyproject.toml (mfemElasticity) is left to its
+# own CMake discovery.
+poetry_env() {  # poetry_env <dir>: the environment's python, if any
+    local venv
+    command -v poetry >/dev/null || return 1
+    venv=$(poetry -C "$1" env info -p 2>/dev/null) \
+        && [[ -x $venv/bin/python ]] && echo "$venv/bin/python"
+}
+
+PYTHON_ARGS=()
+if [[ -f $PROJECT_DIR/pyproject.toml ]]; then
+    if [[ $POETRY_INSTALL -eq 1 && $DRY_RUN -eq 0 ]]; then
+        if ! command -v poetry >/dev/null; then
+            echo "error: --poetry-install needs poetry on the PATH" >&2
+            exit 1
+        fi
+        echo "--- poetry install in $PROJECT_DIR (python: $POETRY_PYTHON)"
+        poetry -C "$PROJECT_DIR" env use "$POETRY_PYTHON"
+        poetry -C "$PROJECT_DIR" install
     fi
+    if PY_ROOT=$(poetry_env "$PROJECT_DIR"); then
+        PY_SUMMARY=$PY_ROOT
+        [[ $GENERATE_MESHES == ON ]] && PYTHON_ARGS+=(-DMESHES_PYTHON="$PY_ROOT")
+        [[ $BUILD_BENCHMARKS == ON ]] && PYTHON_ARGS+=(-DBENCHMARKS_PYTHON="$PY_ROOT")
+        [[ -d $PROJECT_DIR/earth_data ]] && PYTHON_ARGS+=(-DEARTH_DATA_PYTHON="$PY_ROOT")
+    else
+        PY_SUMMARY="NOT FOUND"
+        echo "warning: no poetry environment for $PROJECT_DIR —" >&2
+        echo "  the benchmark and earth-data launchers will refuse to run;" >&2
+        echo "  re-run with --poetry-install (POETRY_PYTHON=python3.12 in" >&2
+        echo "  local.env if python3 is older than 3.12)" >&2
+    fi
+else
+    PY_SUMMARY="(no root pyproject.toml; left to the project's CMake)"
 fi
 # MESHES_SCALE exists only in AdGIA's CMake; pass it only when asked for,
 # so the other projects see no unused-variable warning.
 if [[ -n $MESH_SCALE ]]; then
-    MESHES_ARGS+=(-DMESHES_SCALE="$MESH_SCALE")
+    PYTHON_ARGS+=(-DMESHES_SCALE="$MESH_SCALE")
 fi
 
 CMAKE_ARGS=(
@@ -165,13 +208,14 @@ CMAKE_ARGS=(
     -DBUILD_BENCHMARKS="$BUILD_BENCHMARKS"
     -DBUILD_DOCS="$BUILD_DOCS"
     -DGENERATE_MESHES="$GENERATE_MESHES"
-    "${MESHES_ARGS[@]}"
+    "${PYTHON_ARGS[@]}"
     "${EXTRA_ARGS[@]}"
 )
 
 echo "========================================================"
 echo " $PROJECT ($MODE, $BUILD_TYPE)"
 echo " jobs $NJOBS | examples $BUILD_EXAMPLES | tests $BUILD_TESTS | benchmarks $BUILD_BENCHMARKS | docs $BUILD_DOCS | meshes $GENERATE_MESHES$( [[ -n $MESH_SCALE ]] && echo " (scale $MESH_SCALE)")"
+echo " python env: $PY_SUMMARY"
 echo " compilers: $C_COMPILER / $CXX_COMPILER"
 echo " MFEM: $MFEM_DIR"
 echo " build dir: $BUILD_DIR$( [[ $KEEP -eq 1 ]] && echo ' (kept)' || echo ' (fresh)')"
