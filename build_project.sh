@@ -32,14 +32,19 @@ for the parallel build — they are MPI-only — and off for the serial one):
   -k, --keep          keep the existing build directory (incremental build)
   -r, --run-tests     run ctest after a successful build
       --no-meshes     do not generate the gmsh meshes (GENERATE_MESHES=OFF)
+  -s, --mesh-scale X  factor on every generated mesh's element sizes
+                      (smaller is finer; AdGIA only, MESHES_SCALE=X)
   -n, --dry-run       print the resolved configuration and the cmake
                       command, build nothing
   -h, --help          this message
 
 The meshes are generated with the poetry environment of <project>/meshes
 when it exists (MESHES_PYTHON), so no venv is created inside the build tree.
-The benchmarks discover the poetry environment of <project>/benchmarks
-on their own (BENCHMARKS_PYTHON overrides via the extra cmake args).
+The benchmarks and the post-processing launchers (AdGIA) discover the
+poetry environments of <project>/benchmarks and <project>/postprocess on
+their own (BENCHMARKS_PYTHON / POSTPROCESS_PYTHON override via the extra
+cmake args); run 'poetry install' in those directories first, or the
+launchers fall back on python3.
 
 Paths and compilers come from common.sh and can be overridden from the
 environment or local.env (DEV, PETSC_INSTALL, MPICC, MPICXX, ...).
@@ -57,6 +62,7 @@ KEEP=0
 RUN_TESTS=0
 DRY_RUN=0
 GENERATE_MESHES=ON
+MESH_SCALE=
 EXTRA_ARGS=()
 
 if [[ $# -eq 0 ]]; then usage; exit 1; fi
@@ -101,6 +107,7 @@ while [[ $# -gt 0 ]]; do
         -k|--keep)      KEEP=1 ;;
         -r|--run-tests) RUN_TESTS=1 ;;
         --no-meshes)    GENERATE_MESHES=OFF ;;
+        -s|--mesh-scale) MESH_SCALE=$2; shift ;;
         -n|--dry-run)   DRY_RUN=1 ;;
         -h|--help)      usage; exit 0 ;;
         --)             shift; EXTRA_ARGS=("$@"); break ;;
@@ -127,6 +134,10 @@ if [[ $RUN_TESTS -eq 1 && $BUILD_TESTS == OFF ]]; then
     echo "error: --run-tests needs the tests to be built" >&2
     exit 1
 fi
+if [[ -n $MESH_SCALE && $GENERATE_MESHES == OFF ]]; then
+    echo "error: --mesh-scale has no effect with --no-meshes" >&2
+    exit 1
+fi
 
 # Reuse the poetry environment of meshes/ for the mesh generation if it
 # exists; otherwise CMake makes a venv inside the build directory.
@@ -135,6 +146,11 @@ if [[ $GENERATE_MESHES == ON ]] && command -v poetry >/dev/null; then
     if venv=$(poetry -C "$PROJECT_DIR/meshes" env info -p 2>/dev/null) && [[ -x $venv/bin/python ]]; then
         MESHES_ARGS=(-DMESHES_PYTHON="$venv/bin/python")
     fi
+fi
+# MESHES_SCALE exists only in AdGIA's CMake; pass it only when asked for,
+# so the other projects see no unused-variable warning.
+if [[ -n $MESH_SCALE ]]; then
+    MESHES_ARGS+=(-DMESHES_SCALE="$MESH_SCALE")
 fi
 
 CMAKE_ARGS=(
@@ -155,7 +171,7 @@ CMAKE_ARGS=(
 
 echo "========================================================"
 echo " $PROJECT ($MODE, $BUILD_TYPE)"
-echo " jobs $NJOBS | examples $BUILD_EXAMPLES | tests $BUILD_TESTS | benchmarks $BUILD_BENCHMARKS | docs $BUILD_DOCS | meshes $GENERATE_MESHES"
+echo " jobs $NJOBS | examples $BUILD_EXAMPLES | tests $BUILD_TESTS | benchmarks $BUILD_BENCHMARKS | docs $BUILD_DOCS | meshes $GENERATE_MESHES$( [[ -n $MESH_SCALE ]] && echo " (scale $MESH_SCALE)")"
 echo " compilers: $C_COMPILER / $CXX_COMPILER"
 echo " MFEM: $MFEM_DIR"
 echo " build dir: $BUILD_DIR$( [[ $KEEP -eq 1 ]] && echo ' (kept)' || echo ' (fresh)')"

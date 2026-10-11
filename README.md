@@ -140,6 +140,15 @@ How it works:
 
 ## Notes
 
+- AdGIA requires MFEM >= 4.9 and its configure fails on anything older
+  (v4.10 is its reference version), so keep the `$DEV/mfem` clone
+  reasonably current.
+- AdGIA's `meshes/`, `benchmarks/` and `postprocess/` directories are
+  poetry projects; run `poetry install` in each before building so the
+  mesh generation and the generated launchers use those environments
+  (without them the launchers fall back on `python3`). The resolution of
+  the generated meshes can be changed with `build_adgia_*.sh
+  --mesh-scale X` (smaller is finer).
 - PETSc is used purely as a dependency provider (MPI, hypre, metis,
   parmetis); the parallel MFEM build sets `MFEM_USE_PETSC=OFF`, so MFEM
   is not coupled to the PETSc version. Optional I/O packages (netcdf,
